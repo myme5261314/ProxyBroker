@@ -227,6 +227,11 @@ class Broker:
         :param int backlog:
             (optional) The maximum number of queued connections passed to
             listen. The default value is 100
+        :param bool rand_consume:
+            (optional) If False (default), the proxy returned from the proxy
+            pool will always be the highest priority one. If True, the proxy
+            returned from the proxy pool will be choosed according to its
+            priority -- the bigger priority, the higher probability.
 
         :raises ValueError:
             If :attr:`limit` is less than or equal to zero.
@@ -244,7 +249,7 @@ class Broker:
         self._server = Server(
             host=host, port=port, proxies=self._proxies, timeout=self._timeout,
             max_tries=kwargs.pop('max_tries', self._max_tries),
-            loop=self._loop, **kwargs)
+            loop=self._loop, rand_consume=rand_consume, **kwargs)
         self._server.start()
 
         task = asyncio.ensure_future(self.find(limit=limit, **kwargs))

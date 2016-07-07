@@ -1,6 +1,7 @@
 import time
 import heapq
 import asyncio
+import random
 
 from .errors import *
 from .utils import log, parse_headers, parse_status_line
@@ -14,22 +15,40 @@ class ProxyPool:
     """Imports and gives proxies from queue on demand."""
 
     def __init__(self, proxies, min_req_proxy=5,
-                 max_error_rate=0.5, max_resp_time=8):
+                 max_error_rate=0.5, max_resp_time=8, rand_consume=False):
         self._proxies = proxies
         self._pool = []
         self._min_req_proxy = min_req_proxy
         # if num of erros greater or equal 50% - proxy will be remove from pool
         self._max_error_rate = max_error_rate
         self._max_resp_time = max_resp_time
+        self._rand_consume = rand_consume
 
     async def get(self, scheme):
-        for priority, proxy in self._pool:
-            if scheme in proxy.schemes:
-                chosen = proxy
-                self._pool.remove((proxy.priority, proxy))
-                break
+        if self._rand_consume:
+            # This is a simple but awful approach to implement the random
+            # chosen result.
+            # Refer: http://stackoverflow.com/questions/12265899/
+            rand_list = None
+            for idx, priority, proxy in enumerate(self._pool):
+                if scheme in proxy.schemes:
+                    # This might not be an appropriate equation to evaluate the
+                    # value of priority. Improve it if someone has better idea.
+                    v_priority = 1. / (priority[0] + 1e-5) / (priority[1] + 1e-5)
+                    rand_list += [idx] * round(v_priority * 1000)
+            if not rand_list.empty():
+                chosen_idx = random.choice(rand_list)
+                chosen = self._pool.pop(chosen_idx)
+            else:
+                chosen = await self._import(scheme)
         else:
-            chosen = await self._import(scheme)
+            for priority, proxy in self._pool:
+                if scheme in proxy.schemes:
+                    chosen = proxy
+                    self._pool.remove((proxy.priority, proxy))
+                    break
+            else:
+                chosen = await self._import(scheme)
         return chosen
 
     async def _import(self, expected_scheme):
@@ -59,7 +78,7 @@ class Server:
     def __init__(self, host, port, proxies, timeout=8, max_tries=3,
                  min_req_proxy=5, max_error_rate=0.5, max_resp_time=8,
                  prefer_connect=False, http_allowed_codes=None,
-                 backlog=100, loop=None, **kwargs):
+                 backlog=100, loop=None, rand_consume=False, **kwargs):
         self.host = host
         self.port = int(port)
         self._loop = loop or asyncio.get_event_loop()
@@ -71,7 +90,7 @@ class Server:
         self._server = None
         self._connections = {}
         self._proxy_pool = ProxyPool(
-            proxies, min_req_proxy, max_error_rate, max_resp_time)
+            proxies, min_req_proxy, max_error_rate, max_resp_time, rand_consume)
         self._resolver = Resolver(loop=self._loop)
         self._http_allowed_codes = http_allowed_codes or []
 

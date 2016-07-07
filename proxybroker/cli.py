@@ -218,6 +218,11 @@ def add_serve_args(group):
         type=int,
         default=100,
         help='The maximum number of queued connections passed to listen')
+    group.add_argument(
+        '--rand-consume',
+        action='store_true',
+        dest='rand_consume',
+        help='''Flag that indicates whether to select proxy randomly with priority.
 
 
 def add_limit_arg(group, _def=0,
@@ -302,7 +307,7 @@ def cli(args=sys.argv[1:]):
             max_resp_time=ns.max_resp_time, prefer_connect=ns.prefer_connect,
             http_allowed_codes=ns.http_allowed_codes, backlog=ns.backlog,
             data=ns.data, types=ns.types, countries=ns.countries, post=ns.post,
-            strict=ns.strict, dnsbl=ns.dnsbl)
+            strict=ns.strict, dnsbl=ns.dnsbl, rand_consume=ns.rand_consume)
         print('Server started at http://%s:%d' % (ns.host, ns.port))
 
     try:
