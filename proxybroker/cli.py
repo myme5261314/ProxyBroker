@@ -223,6 +223,7 @@ def add_serve_args(group):
         action='store_true',
         dest='rand_consume',
         help='''Flag that indicates whether to select proxy randomly with priority.
+        ''')
 
 
 def add_limit_arg(group, _def=0,

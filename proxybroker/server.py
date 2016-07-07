@@ -49,6 +49,7 @@ class ProxyPool:
                     break
             else:
                 chosen = await self._import(scheme)
+        log.warning("chosen proxy is %s" % chosen)
         return chosen
 
     async def _import(self, expected_scheme):

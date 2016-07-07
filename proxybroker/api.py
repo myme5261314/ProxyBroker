@@ -249,7 +249,7 @@ class Broker:
         self._server = Server(
             host=host, port=port, proxies=self._proxies, timeout=self._timeout,
             max_tries=kwargs.pop('max_tries', self._max_tries),
-            loop=self._loop, rand_consume=rand_consume, **kwargs)
+            loop=self._loop, rand_consume=kwargs.pop("rand_consume"), **kwargs)
         self._server.start()
 
         task = asyncio.ensure_future(self.find(limit=limit, **kwargs))
