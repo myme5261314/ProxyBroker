@@ -2,6 +2,7 @@ import time
 import heapq
 import asyncio
 import random
+import traceback
 
 from .errors import *
 from .utils import log, parse_headers, parse_status_line
@@ -25,32 +26,36 @@ class ProxyPool:
         self._rand_consume = rand_consume
 
     async def get(self, scheme):
-        if self._rand_consume:
-            # This is a simple but awful approach to implement the random
-            # chosen result.
-            # Refer: http://stackoverflow.com/questions/12265899/
-            rand_list = None
-            for idx, priority, proxy in enumerate(self._pool):
-                if scheme in proxy.schemes:
-                    # This might not be an appropriate equation to evaluate the
-                    # value of priority. Improve it if someone has better idea.
-                    v_priority = 1. / (priority[0] + 1e-5) / (priority[1] + 1e-5)
-                    rand_list += [idx] * round(v_priority * 1000)
-            if not rand_list.empty():
-                chosen_idx = random.choice(rand_list)
-                chosen = self._pool.pop(chosen_idx)
+        try:
+            if self._rand_consume:
+                # This is a simple but awful approach to implement the random
+                # chosen result.
+                # Refer: http://stackoverflow.com/questions/12265899/
+                rand_list = []
+                for idx, (priority, proxy) in enumerate(self._pool):
+                    if scheme in proxy.schemes:
+                        # This might not be an appropriate equation to evaluate the
+                        # value of priority. Improve it if someone has better idea.
+                        # v_priority = 1. / (priority[0] + 1e-5) / (priority[1] + 1e-5)
+                        # rand_list += [idx] * round(v_priority * 1000)
+                        rand_list.append(idx)
+                if rand_list:
+                    log.warning("Random sample from %d proxies." % len(rand_list))
+                    chosen_idx = random.choice(rand_list)
+                    chosen = self._pool.pop(chosen_idx)[1]
+                else:
+                    chosen = await self._import(scheme)
             else:
-                chosen = await self._import(scheme)
-        else:
-            for priority, proxy in self._pool:
-                if scheme in proxy.schemes:
-                    chosen = proxy
-                    self._pool.remove((proxy.priority, proxy))
-                    break
-            else:
-                chosen = await self._import(scheme)
-        log.warning("chosen proxy is %s" % chosen)
-        return chosen
+                for priority, proxy in self._pool:
+                    if scheme in proxy.schemes:
+                        chosen = proxy
+                        self._pool.remove((proxy.priority, proxy))
+                        break
+                else:
+                    chosen = await self._import(scheme)
+            return chosen
+        except Exception as e:
+            log.error("get function failed with: %s" % traceback.format_exc())
 
     async def _import(self, expected_scheme):
         while True:
@@ -139,77 +144,83 @@ class Server:
         self._connections[f] = (client_reader, client_writer)
 
     async def _handle(self, client_reader, client_writer):
-        log.debug('Accepted connection from %s' % (
-                  client_writer.get_extra_info('peername'),))
+        try:
+            err = None
+            log.debug('Accepted connection from %s' % (
+                      client_writer.get_extra_info('peername'),))
 
-        request, headers = await self._parse_request(client_reader)
-        scheme = self._identify_scheme(headers)
-        client = id(client_reader)
-        log.debug('client: %d; request: %s; headers: %s; scheme: %s' % (
-                  client, request, headers, scheme))
+            request, headers = await self._parse_request(client_reader)
+            scheme = self._identify_scheme(headers)
+            client = id(client_reader)
+            log.debug('client: %d; request: %s; headers: %s; scheme: %s' % (
+                      client, request, headers, scheme))
 
-        for attempt in range(self._max_tries):
-            stime, err = 0, None
-            proxy = await self._proxy_pool.get(scheme)
-            proto = self._choice_proto(proxy, scheme)
-            log.debug('client: %d; attempt: %d; proxy: %s; proto: %s' % (
-                      client, attempt, proxy, proto))
-            try:
-                await proxy.connect()
+            for attempt in range(self._max_tries):
+                stime, err = 0, None
+                proxy = await self._proxy_pool.get(scheme)
+                proto = self._choice_proto(proxy, scheme)
+                log.debug('client: %d; attempt: %d; proxy: %s; proto: %s' % (
+                          client, attempt, proxy, proto))
+                try:
+                    await proxy.connect()
 
-                if proto in ('CONNECT:80', 'SOCKS4', 'SOCKS5'):
-                    host = headers.get('Host')
-                    port = headers.get('Port', 80)
-                    try:
-                        ip = await self._resolver.resolve(host)
-                    except ResolveError:
-                        return
-                    proxy.ngtr = proto
-                    await proxy.ngtr.negotiate(host=host, port=port, ip=ip)
-                    if scheme == 'HTTPS' and proto in ('SOCKS4', 'SOCKS5'):
-                        client_writer.write(CONNECTED)
-                        await client_writer.drain()
-                    else:  # HTTP
+                    if proto in ('CONNECT:80', 'SOCKS4', 'SOCKS5'):
+                        host = headers.get('Host')
+                        port = headers.get('Port', 80)
+                        try:
+                            ip = await self._resolver.resolve(host)
+                        except ResolveError:
+                            return
+                        proxy.ngtr = proto
+                        await proxy.ngtr.negotiate(host=host, port=port, ip=ip)
+                        if scheme == 'HTTPS' and proto in ('SOCKS4', 'SOCKS5'):
+                            client_writer.write(CONNECTED)
+                            await client_writer.drain()
+                        else:  # HTTP
+                            await proxy.send(request)
+                    else:  # proto: HTTP & HTTPS
                         await proxy.send(request)
-                else:  # proto: HTTP & HTTPS
-                    await proxy.send(request)
 
-                stime = time.time()
-                stream = [
-                    asyncio.ensure_future(self._stream(
-                        reader=client_reader, writer=proxy.writer)),
-                    asyncio.ensure_future(self._stream(
-                        reader=proxy.reader, writer=client_writer,
-                        scheme=scheme))]
-                await asyncio.gather(*stream, loop=self._loop)
-            except asyncio.CancelledError:
-                log.debug('Cancelled in server._handle')
-                break
-            except (ProxyTimeoutError, ProxyConnError, ProxyRecvError,
-                    ProxySendError, ProxyEmptyRecvError, BadStatusError,
-                    BadResponseError) as e:
-                log.debug('client: %d; error: %r' % (client, e))
-                continue
-            except ErrorOnStream as e:
-                log.debug('client: %d; error: %r; EOF: %s' % (
-                          client, e, client_reader.at_eof()))
-                for task in stream:
-                    if not task.done():
-                        task.cancel()
-                if client_reader.at_eof() and 'Timeout' in repr(e):
-                    # Proxy may not be able to receive EOF and weel be raised a
-                    # TimeoutError, but all the data has already successfully
-                    # returned, so do not consider this error of proxy
+                    stime = time.time()
+                    stream = [
+                        asyncio.ensure_future(self._stream(
+                            reader=client_reader, writer=proxy.writer)),
+                        asyncio.ensure_future(self._stream(
+                            reader=proxy.reader, writer=client_writer,
+                            scheme=scheme))]
+                    await asyncio.gather(*stream, loop=self._loop)
+                except asyncio.CancelledError:
+                    log.warning('Cancelled in server._handle')
                     break
-                err = e
-                if scheme == 'HTTPS':  # SSL Handshake probably failed
+                except (ProxyTimeoutError, ProxyConnError, ProxyRecvError,
+                        ProxySendError, ProxyEmptyRecvError, BadStatusError,
+                        BadResponseError) as e:
+                    log.warning('client: %d; error: %r' % (client, e))
+                    continue
+                except ErrorOnStream as e:
+                    log.warning('client: %d; error: %r; EOF: %s' % (
+                              client, e, client_reader.at_eof()))
+                    for task in stream:
+                        if not task.done():
+                            task.cancel()
+                    if client_reader.at_eof() and 'Timeout' in repr(e):
+                        # Proxy may not be able to receive EOF and weel be raised a
+                        # TimeoutError, but all the data has already successfully
+                        # returned, so do not consider this error of proxy
+                        break
+                    err = e
+                    if scheme == 'HTTPS':  # SSL Handshake probably failed
+                        break
+                except Error as e:
+                    log.warning("Handle url %s with proxy %s failed since %s." % (request, proxy, e))
+                else:
                     break
-            else:
-                break
-            finally:
-                proxy.log(request.decode(), stime, err=err)
-                proxy.close()
-                self._proxy_pool.put(proxy)
+                finally:
+                    proxy.log(request.decode(), stime, err=err)
+                    proxy.close()
+                    self._proxy_pool.put(proxy)
+        except Exception as e:
+            log.error("%s" % traceback.format_exc())
 
     async def _parse_request(self, reader, length=65536):
         request = await reader.read(length)
@@ -230,6 +241,7 @@ class Server:
             if self._prefer_connect and ('CONNECT:80' in proxy.types):
                 proto = 'CONNECT:80'
             else:
+                print(proxy)
                 relevant = {'HTTP', 'CONNECT:80', 'SOCKS4', 'SOCKS5'} & proxy.types.keys()
                 proto = relevant.pop()
         else:  # HTTPS
