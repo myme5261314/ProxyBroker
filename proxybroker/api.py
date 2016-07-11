@@ -350,6 +350,7 @@ class Broker:
     def _push_to_result(self, proxy):
         log.debug('push to result: %r' % proxy)
         self._proxies.put_nowait(proxy)
+        print("Add proxy: %s" % proxy)
         self._update_limit()
 
     def _update_limit(self):

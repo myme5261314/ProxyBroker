@@ -25,6 +25,7 @@ class ProxyPool:
 
     async def get(self, scheme):
         valid_idxes = []
+        print("Pool is %s" % self._pool)
         for idx, (priority, proxy) in enumerate(self._pool):
             if scheme in proxy.schemes:
                 valid_idxes.append(idx)
@@ -51,6 +52,9 @@ class ProxyPool:
             ((proxy.error_rate > self._max_error_rate) or
              (proxy.avg_resp_time > self._max_resp_time))):
             log.debug('%s:%d removed from proxy pool' % (proxy.host, proxy.port))
+            new_proxy = self._import(["HTTPS"])
+            heapq.heappush(self._pool, (new_proxy.priority, new_proxy))
+            log.info("Replace with new proxy %s" % new_proxy)
         else:
             heapq.heappush(self._pool, (proxy.priority, proxy))
         log.debug('%s:%d stat: %s' % (proxy.host, proxy.port, proxy.stat))
