@@ -98,7 +98,8 @@ class Provider:
             host_info = await self._resolver.resolve(host=host, family=socket.AF_INET)
         except ResolveError:
             return
-        connector = aiohttp.TCPConnector(use_dns_cache=True, loop=self._loop)
+        # connector = aiohttp.TCPConnector(use_dns_cache=True, loop=self._loop)
+        connector = aiohttp.ProxyConnector(proxy="http://localhost:8118")
         # This is a dirty hack. I know.
         connector._cached_hosts[(host, 80)] = host_info
         self._session = aiohttp.ClientSession(

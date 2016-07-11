@@ -1,3 +1,4 @@
+import random
 import time
 import heapq
 import asyncio
@@ -23,11 +24,13 @@ class ProxyPool:
         self._max_resp_time = max_resp_time
 
     async def get(self, scheme):
-        for priority, proxy in self._pool:
+        valid_idxes = []
+        for idx, (priority, proxy) in enumerate(self._pool):
             if scheme in proxy.schemes:
-                chosen = proxy
-                self._pool.remove((proxy.priority, proxy))
-                break
+                valid_idxes.append(idx)
+        if valid_idxes:
+            ridx = random.choice(valid_idxes)
+            chosen = self._pool.pop(ridx)[1]
         else:
             chosen = await self._import(scheme)
         return chosen
