@@ -648,8 +648,9 @@ PROVIDERS = [
              proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25')),  # 178
     Provider(url='http://proxytime.ru/http',
              proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25')),  # 547
-    Provider(url='http://free-proxy-list.net/',
-             proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25')),  # 300
+    # Need send post to get list now.
+    # Provider(url='http://free-proxy-list.net/',
+    #          proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25')),  # 300
     Provider(url='http://www.proxyservers.eu/',
              proto=('HTTP', 'CONNECT:80', 'HTTPS', 'CONNECT:25')),  # 1875
     Provider(url='http://socks24.ru/proxy/httpProxies.txt',
