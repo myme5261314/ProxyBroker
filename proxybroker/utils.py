@@ -29,18 +29,13 @@ def get_headers(rv=False):
     _rv = str(random.randint(1000, 9999)) if rv else ''
     headers = {
         # 'User-Agent': 'Mozilla/5.0 (X11; U; Linux i386; ru-RU; rv:2.0) Gecko/20100625 Firefox/3.5.11',
-        # 'User-Agent': 'PrxBroker/%s/%s' % (version, _rv),
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36',
-        # 'Accept': '*/*',
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        'User-Agent': 'PrxBroker/%s/%s' % (version, _rv),
+        'Accept': '*/*',
         'Accept-Encoding': 'gzip, deflate',
         'Pragma': 'no-cache',
         'Cache-control': 'no-cache',
-        "Host": "www.dandb.com",
-        "Connection": "Keep-alive",
-        # 'Cookie': 'cookie=ok',
-        # 'Referer': 'https://www.google.com/'
-    }
+        'Cookie': 'cookie=ok',
+        'Referer': 'https://www.google.com/'}
     return headers if not rv else (headers, _rv)
 
 
