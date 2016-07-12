@@ -32,12 +32,12 @@ def get_headers(rv=False):
         # 'User-Agent': 'PrxBroker/%s/%s' % (version, _rv),
         'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.106 Safari/537.36',
         # 'Accept': '*/*',
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         'Accept-Encoding': 'gzip, deflate',
         'Pragma': 'no-cache',
         'Cache-control': 'no-cache',
-        "Host": "www.dandb.com"
-        "Connection": "Keep-alive"
+        "Host": "www.dandb.com",
+        "Connection": "Keep-alive",
         # 'Cookie': 'cookie=ok',
         # 'Referer': 'https://www.google.com/'
     }
